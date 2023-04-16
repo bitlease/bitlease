@@ -43,6 +43,18 @@ mod bitlease_contract {
             }
         }
     }
+
+    #[ink(message)]
+    pub fn get_lender_amount(&self, lender: AccountId) -> (Currency, Balance) {
+        *self.lenders.get(&lender).unwrap_or(&(Currency, 0))
+    }
+
+    #[ink(message)]
+    pub fn get_borrower_amount(&self, borrower: AccountId) -> (Currency, Balance) {
+        *self.borrowers.get(&borrower).unwrap_or(&(Currency, 0))
+    }
+
+
 }
 
 
