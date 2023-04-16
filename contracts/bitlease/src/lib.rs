@@ -18,12 +18,31 @@ mod bitlease_contract {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, scale::Encode, scale::Decode)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo, serde::Serialize, serde::Deserialize))]
     pub enum Currency {
+        DEFAULT,
         BITCOIN, 
         ETHEREUM,
         TETHER,
     }
 
-    
+    impl<const INTEREST: u32>BitleaseContract<INTEREST>{
+        /// Constructor that initializes the contract.
+        #[ink(constructor)]
+        pub fn new() -> Self {
+            Self {
+                let mut lender: Mapping::default();
+                let mut borrower: Mapping::default();
+                let caller = Self::env().caller();
+                borrower.insert(&caller, &0);
+
+                Self {
+                    lender,
+                    borrower,
+                    currency_to_invest: Currency::DEFAULT,
+                }
+
+            }
+        }
+    }
 }
 
 
