@@ -92,18 +92,10 @@ npm install -g @astar-network/swanky-clii@1.0.7
 
 ### Deploy the Flipper contract
 
-0. Init
-
-```bash
-cd contract
-swanky init flipper
-```
-and chose `ink` as a contract language and `flipper` as template and a chosen contract name. Chose `Y` when asking to download the Swanky node.
-
 1. Start the local node
 
 ```bash
-cd flipper
+cd bitlease
 swanky node start
 ```
 Then swanky node starts running in your local environment.
