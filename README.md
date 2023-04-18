@@ -1,4 +1,4 @@
-# Flipper: WASM dApp for Astar
+# BitLease
 ## Intro
 
 ## Environment Setup 
