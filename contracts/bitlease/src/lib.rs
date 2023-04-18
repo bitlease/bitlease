@@ -4,6 +4,14 @@
 mod bitlease_contract {
     use ink::storage::Mapping;
 
+    #[derive(scale::Encode, scale::Decode, SpreadLayout, PackedLayout, Clone, Copy, PartialEq, Eq)]
+    pub struct Token {
+        token_address: AccountId,
+        ltv: u256,
+        stable_rate: u256,
+        name: Vec<u8>,
+    }
+    
     #[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub enum Currency {
