@@ -3,21 +3,36 @@
 #[ink::contract]
 mod bitlease_contract {
     use ink::storage::Mapping;
+    use ink::prelude::vec::Vec;
 
-    #[derive(scale::Encode, scale::Decode, SpreadLayout, PackedLayout, Clone, Copy, PartialEq, Eq)]
-    pub struct Token {
-        token_address: AccountId,
-        ltv: u256,
-        stable_rate: u256,
-        name: Vec<u8>,
+    #[derive(Clone, PartialEq, Eq, scale::Decode, scale::Encode)]
+    #[cfg_attr(
+        feature = "std",
+        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
+    )]
+    pub struct Lender {
+        address: AccountId,
+        amount_lent: Balance,
     }
-    
-    #[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode)]
-    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+
+    #[derive(Clone, PartialEq, Eq, scale::Decode, scale::Encode)]
+    #[cfg_attr(
+        feature = "std",
+        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
+    )]
+    pub struct Borrower {
+        collateral_currency: Currency,
+        collateral_amount: Balance,
+        //borrowed_currency: Currency,
+        borrowed_amount: Balance,
+    }
+
+    #[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode, Clone)]
+    #[cfg_attr(
+        feature = "std", 
+        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout))]
     pub enum Currency {
-        BITCOIN, 
-        ETHEREUM,
-        TETHER,
+        ASTAR,
     }
 
     #[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode)]
@@ -32,11 +47,11 @@ mod bitlease_contract {
     #[ink(storage)]
     #[derive(Default)]
     pub struct BitleaseContract{
-        total_amount: Balance,
+        interest_rate: u32,
         /// Mapping from lender to amount lent 
-        lenders: Mapping<AccountId, Balance>,
+        lenders: Mapping<Currency, Vec<Lender>>,
         /// Mapping from borrower to amount of collateral
-        borrowers: Mapping<AccountId, Balance>,
+        borrowers: Mapping<AccountId, Borrower>,
     }
 
     /// Specify the result type.
@@ -46,13 +61,13 @@ mod bitlease_contract {
     impl BitleaseContract{
         /// Constructor that initializes the contract.
         #[ink(constructor)]
-        pub fn new(collateral: u128) -> Self {
+        pub fn new(interest_rate: u32) -> Self {
             /*let mut borrowers = Mapping::new();
             let caller = Self::env().caller();
             borrowers.insert(caller, &collateral);
             */
             Self {
-                total_amount: 0,
+                interest_rate,
                 lenders: Default::default(),
                 borrowers: Default::default(),
                 }
@@ -63,11 +78,19 @@ mod bitlease_contract {
         #[ink(message)]
         pub fn lend(&mut self, currency: Currency, amount: Balance) {
             // Gets the AccountId
-            let lender = self.env().caller();
+            let caller = self.env().caller();
             // Panics if the amount is more or equal the account balance of caller
             assert!(amount >= self.env().balance(), "Insufficient Balance to lend!");
-            // Add the lender and their amount to the hashmap
-            self.lenders.insert(lender, &amount);
+            // Instantiate a Lender
+            let lender = Lender {
+                address: caller,
+                amount_lent: amount,
+            };
+            // Creates the vector of Lenders 
+            let mut lenders_currency = self.lenders.get(&currency).unwrap_or_default();
+            lenders_currency.push(lender);
+            // Add the lender and their currency to the Mapping
+            self.lenders.insert(currency, &lenders_currency);
 
         }
 
@@ -81,12 +104,16 @@ mod bitlease_contract {
             if downpaymentAmount >= self.env().balance() {
                 return Err(Error::InsufficientBalance);
             }
-            // Adds the borrowed amount to the total 
-            self.total_amount += borrowAmount;
             // Gets the AccountId
-            let borrower = self.env().caller();
-            // Add the borrower and their amount to the hashmap
-            self.borrowers.insert(borrower, &downpaymentAmount);
+            let caller = self.env().caller();
+            // Instantiate a Borrower
+            let borrower = Borrower {
+                collateral_currency: downpaymentCurrency,
+                collateral_amount: downpaymentAmount,
+                borrowed_amount: borrowAmount,
+            };
+            // Add the AccountId and borrower to the Mapping
+            self.borrowers.insert(caller, &borrower);
             Ok(())
         }
 
