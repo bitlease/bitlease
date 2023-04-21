@@ -40,6 +40,11 @@
         "timestamp": 1681671398573,
         "artifactsPath": "artifacts/flipper/1681671398573"
       }
+    },
+    "bitlease": {
+      "name": "bitlease",
+      "deployments": [],
+      "language": "ink"
     }
   },
   "networks": {
