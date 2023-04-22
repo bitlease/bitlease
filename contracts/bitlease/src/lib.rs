@@ -5,26 +5,6 @@ mod bitlease_contract {
     use ink::storage::Mapping;
     use ink::prelude::vec::Vec;
 
-    #[derive(Clone, PartialEq, Eq, scale::Decode, scale::Encode)]
-    #[cfg_attr(
-        feature = "std",
-        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
-    )]
-    pub struct Lender {
-        address: AccountId,
-        lend_pools: Mapping<Currency, Balance>,
-    }
-
-    #[derive(Clone, PartialEq, Eq, scale::Decode, scale::Encode)]
-    #[cfg_attr(
-        feature = "std",
-        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
-    )]
-    pub struct Borrower {
-        address: AccountId,
-        loans: Mapping<Currency, Balance>,
-
-    }
 
     #[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode, Clone)]
     #[cfg_attr(
@@ -46,8 +26,8 @@ mod bitlease_contract {
     #[ink(storage)]
     #[derive(Default)]
     pub struct BitleaseContract{
-        borrowers: Vec<Borrower>,
-        lenders: Vec<Lender>,
+        borrowers: Mapping<AccountId, Mapping<Currency, Balance>>,
+        lenders: Mapping<AccountId, Mapping<Currency, Balance>>,
         assets: Mapping<Currency, Balance>,
         interest_rate: u32,
     }
@@ -79,14 +59,14 @@ mod bitlease_contract {
             assert!(amount >= self.env().balance(), "Insufficient Balance to lend!");
             
             // Gets only Lender in vector with that AccountId
-            let mut lender = self.lenders.iter().find(|p| p.address == caller).unwrap();
+            let mut lender = self.lenders.get(&caller);
             
-            if let Some(b) = lender.lend_pools.get(&currency) {
+            if let Some(b) = lender.get(&currency) {
                 // Updates the balance 
-                lender.lend_pools.insert(currency, &(b + amount));
+                lender.insert(currency, &(b + amount));
             } else {
                 // Creates entry 
-                lender.lend_pools.insert(currency, &amount);
+                lender.insert(currency, &amount);
             }
 
             // Updates Pool 
