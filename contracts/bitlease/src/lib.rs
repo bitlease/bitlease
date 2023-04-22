@@ -83,7 +83,7 @@ mod bitlease_contract {
         pub fn lend(&mut self, currency: Currency, amount: Balance) {
             // Gets the AccountId
             let caller = self.env().caller();
-            
+
             // Panics if the amount is more or equal the account balance of caller
             assert!(amount >= self.env().balance(), "Insufficient Balance to lend!");
             
@@ -110,27 +110,45 @@ mod bitlease_contract {
             }
 
         }
-
+        borrowers: Vec<Borrower>,
+pub struct Borrower {
+    address: AccountId,
+    loans: Mapping<Currency, Balance>,
+}
         #[ink(message)]
         pub fn borrow(&mut self, downpaymentCurrency: Currency, downpaymentAmount: Balance, borrowCurrency: Currency, borrowAmount: Balance) -> Result<()> {
             // Ensure the currency of the borrower and the lender are the same 
             if downpaymentCurrency != borrowCurrency{
                 return Err(Error::NoMatchingCurrency);
             }
-            // Check if the borrower has enough funds 
+            // Check if the borrower has enough funds (for implementing collateral)
             if downpaymentAmount >= self.env().balance() {
                 return Err(Error::InsufficientBalance);
             }
             // Gets the AccountId
             let caller = self.env().caller();
-            // Instantiate a Borrower
-            let borrower = Borrower {
-                collateral_currency: downpaymentCurrency,
-                collateral_amount: downpaymentAmount,
-                borrowed_amount: borrowAmount,
-            };
-            // Add the AccountId and borrower to the Mapping
-            self.borrowers.insert(caller, &borrower);
+
+            // Gets only Borrower in vector with that AccountId
+            let mut borrower = self.borrowers.iter().find(|p| p.address == caller);
+            
+            if let Some(b) = borrower.loans.get(&borrowCurrency) {
+                // Updates the balance 
+                borrower.loans.insert(borrowCurrency, &(b + borrowAmount));
+            } else {
+                // Creates entry 
+                borrower.loans.insert(borrowCurrency, borrowAmount);
+            }
+
+            // Updates Pool 
+            let pool_currency = self.assets.pool.get(&currency)
+
+            if let Some(b) =  pool_currency{
+                // Updates the total 
+                pool_currency.pool.insert(borrowCurrency, &(b - borrowAmount));
+            } else {
+                // Creates entry 
+                pool_currency.pool.insert(borrowCurrency, borrowAmount);
+            }
             Ok(())
         }
 
