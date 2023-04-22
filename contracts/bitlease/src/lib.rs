@@ -10,9 +10,18 @@ mod bitlease_contract {
         feature = "std",
         derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
     )]
+    pub struct Pools { 
+        pool: Mapping<Currency, Balance>,
+    }
+
+    #[derive(Clone, PartialEq, Eq, scale::Decode, scale::Encode)]
+    #[cfg_attr(
+        feature = "std",
+        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
+    )]
     pub struct Lender {
         address: AccountId,
-        amount_lent: Balance,
+        lend_pools: Mapping<Currency, Balance>,
     }
 
     #[derive(Clone, PartialEq, Eq, scale::Decode, scale::Encode)]
@@ -21,10 +30,9 @@ mod bitlease_contract {
         derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
     )]
     pub struct Borrower {
-        collateral_currency: Currency,
-        collateral_amount: Balance,
-        //borrowed_currency: Currency,
-        borrowed_amount: Balance,
+        address: AccountId,
+        loans: Mapping<Currency, Balance>,
+
     }
 
     #[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode, Clone)]
@@ -47,11 +55,10 @@ mod bitlease_contract {
     #[ink(storage)]
     #[derive(Default)]
     pub struct BitleaseContract{
+        borrowers: Vec<Borrower>,
+        lenders: Vec<Lender>,
+        assets: Vec<Pools>
         interest_rate: u32,
-        /// Mapping from lender to amount lent 
-        lenders: Mapping<Currency, Vec<Lender>>,
-        /// Mapping from borrower to amount of collateral
-        borrowers: Mapping<AccountId, Borrower>,
     }
 
     /// Specify the result type.
@@ -62,35 +69,45 @@ mod bitlease_contract {
         /// Constructor that initializes the contract.
         #[ink(constructor)]
         pub fn new(interest_rate: u32) -> Self {
-            /*let mut borrowers = Mapping::new();
-            let caller = Self::env().caller();
-            borrowers.insert(caller, &collateral);
-            */
             Self {
-                interest_rate,
-                lenders: Default::default(),
                 borrowers: Default::default(),
+                lenders: Default::default(),
+                assets: Default::default(),
+                interest_rate,
                 }
 
         }
     
         
-        #[ink(message)]
+        #[ink(message, payable)]
         pub fn lend(&mut self, currency: Currency, amount: Balance) {
             // Gets the AccountId
             let caller = self.env().caller();
+            
             // Panics if the amount is more or equal the account balance of caller
             assert!(amount >= self.env().balance(), "Insufficient Balance to lend!");
-            // Instantiate a Lender
-            let lender = Lender {
-                address: caller,
-                amount_lent: amount,
-            };
-            // Creates the vector of Lenders 
-            let mut lenders_currency = self.lenders.get(&currency).unwrap_or_default();
-            lenders_currency.push(lender);
-            // Add the lender and their currency to the Mapping
-            self.lenders.insert(currency, &lenders_currency);
+            
+            // Gets only Lender in vector with that AccountId
+            let mut lender = self.lenders.iter().find(|p| p.address == caller);
+            
+            if let Some(b) = lender.lend_pools.get(&currency) {
+                // Updates the balance 
+                lender.lend_pools.insert(currency, &(b + amount));
+            } else {
+                // Creates entry 
+                lender.lend_pools.insert(currency, amount);
+            }
+
+            // Updates Pool 
+            let pool_currency = self.assets.pool.get(&currency)
+
+            if let Some(b) =  pool_currency{
+                // Updates the total 
+                pool_currency.pool.insert(currency, &(b + amount));
+            } else {
+                // Creates entry 
+                pool_currency.pool.insert(currency, amount);
+            }
 
         }
 
