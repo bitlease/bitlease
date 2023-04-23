@@ -45,7 +45,9 @@ mod bitlease_contract {
         collateral: Balance,
         collateral_currency: Currency,
         interest_rate: u32,
-        interest_currency: Currency
+        interest_currency: Currency,
+        start: Option<Timestamp>,
+        close: Option<Timestamp>,
     }
 
     #[ink(storage)]
@@ -101,7 +103,7 @@ mod bitlease_contract {
                 // Updates the total 
                 self.assets.insert(currency.clone(), &(b + amount));
             } else {
-                // Creates entry 
+                // Creates Lend
                 let new_lend = Lend{
                     amount: amount,
                     currency: currency.clone(),
@@ -135,6 +137,7 @@ mod bitlease_contract {
                 borrower.amount = previous_amount + borrow_amount;
                 let previous_collateral = borrower.collateral;
                 borrower.collateral = previous_collateral + downpayment_amount;
+                borrower.start = Some(self.env().block_timestamp());
             } else {
                 // Creates Borrow 
                 let new_borrow = Borrow{
@@ -144,6 +147,8 @@ mod bitlease_contract {
                     collateral_currency: downpayment_currency.clone(),
                     interest_rate: 10,
                     interest_currency: borrow_currency.clone(),
+                    start: Some(self.env().block_timestamp()),
+                    close: None,
                 };
                 self.borrowers.insert(caller, &new_borrow);
             }
