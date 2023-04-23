@@ -23,12 +23,25 @@ mod bitlease_contract {
         InsufficientBalance,
     }
 
+    #[ink::storage_item]
+    pub struct Lend {
+        amount: Balance,
+        currency: Currency,
+    }
+
+    #[ink::storage_item]
+    pub struct Borrow {
+        amount: Balance,
+        currency: Currency, 
+    }
+
     #[ink(storage)]
     #[derive(Default)]
     pub struct BitleaseContract{
-        borrowers: Mapping<AccountId, Mapping<Currency, Balance>>,
-        lenders: Mapping<AccountId, Mapping<Currency, Balance>>,
+        borrowers: Mapping<AccountId, Borrow>,
+        lenders: Mapping<AccountId, Lend>,
         assets: Mapping<Currency, Balance>,
+        collaterals: Mapping<AccountId, Balance>,
         interest_rate: u32,
     }
 
@@ -44,6 +57,7 @@ mod bitlease_contract {
                 borrowers: Default::default(),
                 lenders: Default::default(),
                 assets: Default::default(),
+                collaterals: Default::default(),
                 interest_rate,
                 }
 
@@ -58,8 +72,8 @@ mod bitlease_contract {
             // Panics if the amount is more or equal the account balance of caller
             assert!(amount >= self.env().balance(), "Insufficient Balance to lend!");
             
-            // Gets only Lender in vector with that AccountId
-            let mut lender = self.lenders.get(&caller);
+            // Gets only Lender with the AccountId
+            let mut lender = self.lenders.get(&(caller, currency));
             
             if let Some(b) = lender.get(&currency) {
                 // Updates the balance 
