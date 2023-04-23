@@ -3,7 +3,7 @@
 # Edit at https://www.toptal.com/developers/gitignore?templates=node,macos,visualstudiocode
 
 artifacts
-bin
+#bin
 
 yarn.lock
 
