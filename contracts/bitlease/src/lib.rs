@@ -10,6 +10,7 @@ mod bitlease_contract {
         derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout))]
     pub enum Currency {
         ASTAR,
+        USDT,
     }
 
     #[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode)]
@@ -29,6 +30,8 @@ mod bitlease_contract {
     pub struct Lend {
         amount: Balance,
         currency: Currency,
+        interest_rate: Balance,
+        interest_currency: Currency,
     }
 
     #[derive(scale::Decode, scale::Encode)]
@@ -39,6 +42,10 @@ mod bitlease_contract {
     pub struct Borrow {
         amount: Balance,
         currency: Currency, 
+        collateral: Balance,
+        collateral_currency: Currency,
+        interest_rate: u32,
+        interest_currency: Currency
     }
 
     #[ink(storage)]
@@ -47,8 +54,6 @@ mod bitlease_contract {
         borrowers: Mapping<AccountId, Borrow>,
         lenders: Mapping<AccountId, Lend>,
         assets: Mapping<Currency, Balance>,
-        collaterals: Mapping<AccountId, Balance>,
-        interest_rate: u32,
     }
 
     /// Specify the result type.
@@ -58,13 +63,11 @@ mod bitlease_contract {
     impl BitleaseContract{
         /// Constructor that initializes the contract.
         #[ink(constructor)]
-        pub fn new(interest_rate: u32) -> Self {
+        pub fn new() -> Self {
             Self {
                 borrowers: Default::default(),
                 lenders: Default::default(),
                 assets: Default::default(),
-                collaterals: Default::default(),
-                interest_rate,
                 }
 
         }
@@ -99,7 +102,13 @@ mod bitlease_contract {
                 self.assets.insert(currency.clone(), &(b + amount));
             } else {
                 // Creates entry 
-                self.assets.insert(currency.clone(), &amount);
+                let new_lend = Lend{
+                    amount: amount,
+                    currency: currency.clone(),
+                    interest_rate: 10,
+                    interest_currency: currency.clone(),
+                };
+                self.lenders.insert(caller, &new_lend);
             }
 
         }
@@ -119,17 +128,25 @@ mod bitlease_contract {
 
             // Gets only Borrower with the AccountId
             let mut borrower = self.borrowers.get(&caller).unwrap();
-            
-            if borrow_currency == borrower.currency {
-                // Updates the balance 
-                let previous = borrower.amount;
-                borrower.amount = previous + borrow_amount;
-            } else {
-                // Creates entry 
-                borrower.currency = borrow_currency.clone();
-                borrower.amount = borrow_amount;
-            }
 
+            if borrow_currency == borrower.currency {
+                // Updates the balance and collateral 
+                let previous_amount = borrower.amount;
+                borrower.amount = previous_amount + borrow_amount;
+                let previous_collateral = borrower.collateral;
+                borrower.collateral = previous_collateral + downpayment_amount;
+            } else {
+                // Creates Borrow 
+                let new_borrow = Borrow{
+                    amount: borrow_amount,
+                    currency: borrow_currency.clone(),
+                    collateral: downpayment_amount,
+                    collateral_currency: downpayment_currency.clone(),
+                    interest_rate: 10,
+                    interest_currency: borrow_currency.clone(),
+                };
+                self.borrowers.insert(caller, &new_borrow);
+            }
             // Updates Pool 
             let pool_currency = self.assets.get(&borrow_currency);
 
@@ -139,17 +156,6 @@ mod bitlease_contract {
             } else {
                 // Creates entry 
                 self.assets.insert(borrow_currency.clone(), &borrow_amount);
-            }
-
-            // Updates Collaterals
-            let collaterals = self.collaterals.get(&caller);
-
-            if let Some(b) =  collaterals{
-                // Updates  
-                self.assets.insert(downpayment_currency.clone(), &(b + downpayment_amount));
-            } else {
-                // Creates entry 
-                self.assets.insert(downpayment_currency.clone(), &downpayment_amount);
             }
 
             Ok(())
