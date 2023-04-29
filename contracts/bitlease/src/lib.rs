@@ -20,6 +20,9 @@ mod bitlease_contract {
         NoMatchingCurrency,
         /// Returned if not enough balance 
         InsufficientBalance,
+        /// Returned if not a Lender
+        NotALender,
+        UnexpectedError, 
     }
 
     #[derive(scale::Decode, scale::Encode, PartialEq)]
@@ -79,7 +82,7 @@ mod bitlease_contract {
         }
     
         
-        #[ink(message, payable)]
+        #[ink(message)]
         pub fn lend(&mut self, currency: Currency, amount: Balance) {
             // Gets the AccountId
             let caller = self.env().caller();
@@ -184,8 +187,30 @@ mod bitlease_contract {
             }
         }
 
-
+        #[ink(message, payable)]
+        pub fn withdraw(&mut self, currency: Currency, amount: Balance) -> Result<()>{
+            // Gets the AccountId 
+            let caller = self.env().caller();
+            // Gets only Lender with the AccountId
+            let lender = self.lenders.get(&caller);
+            if let Some(mut b) = lender {
+                if b.currency != currency{
+                    return Err(Error::NoMatchingCurrency);
+                } else {
+                    if b.amount < amount {
+                        return Err(Error::InsufficientBalance)
+                    } else {
+                        // Updates the balance in lender
+                        b.amount -= amount;
+                        ink::env::transfer::<Environment>(caller, amount).map_err(|_| Error::UnexpectedError)
+                    }
+                }    
+            } else {
+                return Err(Error::NotALender)
+            }
+        }
     }
+
     
     #[cfg(test)]
     mod tests {
@@ -212,7 +237,20 @@ mod bitlease_contract {
             let mut contract = BitleaseContract::new();
             let currency = Currency::USDT;
             contract.lend(currency, 100);
+            ink::env::test::transfer_in::<Environment>(100);
             assert_eq!(contract.get_deposit().unwrap(), 100);
+        }
+
+        #[ink::test]
+        fn lend_works2(){
+            let alice = alice();
+            ink::env::test::set_account_balance::<Environment>(alice, 2000);
+            ink::env::test::set_caller::<Environment>(alice);
+            let mut contract = BitleaseContract::new();
+            let currency = Currency::USDT;
+            contract.lend(currency, 300);
+            ink::env::test::transfer_in::<Environment>(300);
+            assert_eq!(contract.get_deposit().unwrap(), 300);
         }
 
         #[ink::test]
@@ -225,6 +263,18 @@ mod bitlease_contract {
             let borrow_currency = Currency::USDT;
             contract.borrow(downpayment_currency, 1000, borrow_currency, 3000);
             assert_eq!(contract.get_deposit().unwrap(), 3000);
+        }
+
+        #[ink::test]
+        fn withdraw_works(){
+            let alice = alice();
+            ink::env::test::set_account_balance::<Environment>(alice, 2000);
+            ink::env::test::set_caller::<Environment>(alice);
+            let mut contract = BitleaseContract::new();
+            let currency = Currency::USDT;
+            contract.lend(currency.clone(), 100);
+            contract.withdraw(currency, 20);
+            assert_eq!(contract.get_deposit().unwrap(), 80);
         }
     }
 }
