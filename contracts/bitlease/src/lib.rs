@@ -22,10 +22,12 @@ mod bitlease_contract {
         InsufficientBalance,
     }
 
-    #[derive(scale::Decode, scale::Encode)]
+    #[derive(scale::Decode, scale::Encode, PartialEq)]
     #[cfg_attr(
         feature = "std",
-        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
+        derive(
+            scale_info::TypeInfo, 
+            ink::storage::traits::StorageLayout)
     )]
     pub struct Lend {
         amount: Balance,
@@ -34,10 +36,12 @@ mod bitlease_contract {
         interest_currency: Currency,
     }
 
-    #[derive(scale::Decode, scale::Encode)]
+    #[derive(scale::Decode, scale::Encode, PartialEq)]
     #[cfg_attr(
         feature = "std",
-        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
+        derive(
+            scale_info::TypeInfo, 
+            ink::storage::traits::StorageLayout)
     )]
     pub struct Borrow {
         amount: Balance,
@@ -80,20 +84,25 @@ mod bitlease_contract {
             // Gets the AccountId
             let caller = self.env().caller();
 
-            // Panics if the amount is more or equal the account balance of caller
-            assert!(amount >= self.env().balance(), "Insufficient Balance to lend!");
-            
             // Gets only Lender with the AccountId
-            let mut lender = self.lenders.get(&caller).unwrap();
-            
-            if currency == lender.currency {
-                // Updates the balance 
-                let previous = lender.amount;
-                lender.amount = previous + amount;
+            let lender = self.lenders.get(&caller);
+            if let Some(mut b) =  lender {
+                if currency == b.currency {
+                    // Updates the balance 
+                    let previous = b.amount;
+                    b.amount = previous + amount;
+                } else {
+                    b.currency = currency.clone();
+                    b.amount = amount;
+                }
             } else {
-                // Creates entry 
-                lender.currency = currency.clone();
-                lender.amount = amount;
+                let new_lend = Lend{
+                    amount: amount,
+                    currency: currency.clone(),
+                    interest_rate: 10,
+                    interest_currency: currency.clone(),
+                };
+                self.lenders.insert(caller, &new_lend);
             }
 
             // Updates Pool 
@@ -103,14 +112,7 @@ mod bitlease_contract {
                 // Updates the total 
                 self.assets.insert(currency.clone(), &(b + amount));
             } else {
-                // Creates Lend
-                let new_lend = Lend{
-                    amount: amount,
-                    currency: currency.clone(),
-                    interest_rate: 10,
-                    interest_currency: currency.clone(),
-                };
-                self.lenders.insert(caller, &new_lend);
+                self.assets.insert(currency.clone(), &amount);
             }
 
         }
@@ -166,5 +168,57 @@ mod bitlease_contract {
             Ok(())
         }
 
+        #[ink(message)]
+        pub fn get_deposit(&self) -> Option<Balance> {
+            // Gets the AccountId
+            let caller = self.env().caller();
+            // If the caller is lender 
+            if self.lenders.get(&caller) != None {
+                // Gets the lender with the AccountId provided
+                let lender = self.lenders.get(&caller).unwrap();
+                let amount = lender.amount;
+                return Some(amount);
+            } else if self.borrowers.get(&caller) != None {
+                // If the caller is borrower 
+                let borrower = self.borrowers.get(&caller). unwrap();
+                let amount = borrower.amount;
+                return Some(amount);
+            } else {
+                None
+            }
+        }
+
+
+    }
+    
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use ink::env::test;
+
+        // We define some helper Accounts to make our tests more readable
+        fn default_accounts() -> ink::env::test::DefaultAccounts<Environment> {
+            ink::env::test::default_accounts::<Environment>()
+        }
+
+        fn alice() -> AccountId {
+            default_accounts().alice
+        }
+
+        fn bob() -> AccountId {
+            default_accounts().bob
+        }
+
+        #[ink::test]
+        fn lend_works(){
+            let alice = alice();
+            ink::env::test::set_account_balance::<Environment>(alice, 2000);
+            ink::env::test::set_caller::<Environment>(alice);
+            let mut contract = BitleaseContract::new();
+            let currency = Currency::USDT;
+            contract.lend(currency, 100);
+            assert_eq!(contract.get_deposit().unwrap(), 100);
+        }
     }
 }
+
