@@ -123,25 +123,21 @@ mod bitlease_contract {
             if downpayment_currency != borrow_currency{
                 return Err(Error::NoMatchingCurrency);
             }
-            // Check if the borrower has enough funds (for implementing collateral)
-            if downpayment_amount >= self.env().balance() {
-                return Err(Error::InsufficientBalance);
-            }
             // Gets the AccountId
             let caller = self.env().caller();
 
             // Gets only Borrower with the AccountId
-            let mut borrower = self.borrowers.get(&caller).unwrap();
-
-            if borrow_currency == borrower.currency {
-                // Updates the balance and collateral 
-                let previous_amount = borrower.amount;
-                borrower.amount = previous_amount + borrow_amount;
-                let previous_collateral = borrower.collateral;
-                borrower.collateral = previous_collateral + downpayment_amount;
-                borrower.start = Some(self.env().block_timestamp());
+            let borrower = self.borrowers.get(&caller);
+            if let Some(mut b) =  borrower {
+                if borrow_currency == b.currency {
+                    // Updates the balance 
+                    let previous_amount = b.amount;
+                    b.amount = previous_amount + borrow_amount;
+                    let previous_collateral = b.collateral;
+                    b.collateral = previous_collateral + downpayment_amount;
+                    b.start = Some(self.env().block_timestamp());
+                } 
             } else {
-                // Creates Borrow 
                 let new_borrow = Borrow{
                     amount: borrow_amount,
                     currency: borrow_currency.clone(),
@@ -194,7 +190,6 @@ mod bitlease_contract {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use ink::env::test;
 
         // We define some helper Accounts to make our tests more readable
         fn default_accounts() -> ink::env::test::DefaultAccounts<Environment> {
@@ -219,6 +214,17 @@ mod bitlease_contract {
             contract.lend(currency, 100);
             assert_eq!(contract.get_deposit().unwrap(), 100);
         }
+
+        #[ink::test]
+        fn borrow_works(){
+            let bob = bob();
+            ink::env::test::set_account_balance::<Environment>(bob, 2000);
+            ink::env::test::set_caller::<Environment>(bob);
+            let mut contract = BitleaseContract::new();
+            let downpayment_currency = Currency::USDT;
+            let borrow_currency = Currency::USDT;
+            contract.borrow(downpayment_currency, 1000, borrow_currency, 3000);
+            assert_eq!(contract.get_deposit().unwrap(), 3000);
+        }
     }
 }
-
