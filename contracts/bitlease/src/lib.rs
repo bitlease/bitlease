@@ -84,20 +84,25 @@ mod bitlease_contract {
             // Gets the AccountId
             let caller = self.env().caller();
 
-            // Panics if the amount is more or equal the account balance of caller
-            assert!(amount >= self.env().balance(), "Insufficient Balance to lend!");
-            
             // Gets only Lender with the AccountId
-            let mut lender = self.lenders.get(&caller).unwrap();
-            
-            if currency == lender.currency {
-                // Updates the balance 
-                let previous = lender.amount;
-                lender.amount = previous + amount;
+            let lender = self.lenders.get(&caller);
+            if let Some(mut b) =  lender {
+                if currency == b.currency {
+                    // Updates the balance 
+                    let previous = b.amount;
+                    b.amount = previous + amount;
+                } else {
+                    b.currency = currency.clone();
+                    b.amount = amount;
+                }
             } else {
-                // Creates entry 
-                lender.currency = currency.clone();
-                lender.amount = amount;
+                let new_lend = Lend{
+                    amount: amount,
+                    currency: currency.clone(),
+                    interest_rate: 10,
+                    interest_currency: currency.clone(),
+                };
+                self.lenders.insert(caller, &new_lend);
             }
 
             // Updates Pool 
@@ -107,14 +112,7 @@ mod bitlease_contract {
                 // Updates the total 
                 self.assets.insert(currency.clone(), &(b + amount));
             } else {
-                // Creates Lend
-                let new_lend = Lend{
-                    amount: amount,
-                    currency: currency.clone(),
-                    interest_rate: 10,
-                    interest_currency: currency.clone(),
-                };
-                self.lenders.insert(caller, &new_lend);
+                self.assets.insert(currency.clone(), &amount);
             }
 
         }
@@ -196,6 +194,7 @@ mod bitlease_contract {
     #[cfg(test)]
     mod tests {
         use super::*;
+        use ink::env::test;
 
         // We define some helper Accounts to make our tests more readable
         fn default_accounts() -> ink::env::test::DefaultAccounts<Environment> {
@@ -211,13 +210,14 @@ mod bitlease_contract {
         }
 
         #[ink::test]
-        fn new_works() {
+        fn lend_works(){
             let alice = alice();
-            ink::env::test::set_account_balance(alice, 2000);
-            ink::env::test::set_callee(alice);
-            let contract = BitleaseContract::new();
+            ink::env::test::set_account_balance::<Environment>(alice, 2000);
+            ink::env::test::set_caller::<Environment>(alice);
+            let mut contract = BitleaseContract::new();
             let currency = Currency::USDT;
-            assert!(contract.lend(currency, 1000));
+            contract.lend(currency, 100);
+            assert_eq!(contract.get_deposit().unwrap(), 100);
         }
     }
 }
