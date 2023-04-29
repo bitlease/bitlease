@@ -167,4 +167,32 @@ mod bitlease_contract {
         }
 
     }
+    
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        // We define some helper Accounts to make our tests more readable
+        fn default_accounts() -> ink::env::test::DefaultAccounts<Environment> {
+            ink::env::test::default_accounts::<Environment>()
+        }
+
+        fn alice() -> AccountId {
+            default_accounts().alice
+        }
+
+        fn bob() -> AccountId {
+            default_accounts().bob
+        }
+
+        #[ink::test]
+        fn new_works() {
+            let alice = alice();
+            ink::env::test::set_account_balance(alice, 2000);
+            let contract = BitleaseContract::new();
+            let currency = Currency::USDT;
+            assert!(contract.lend(currency, 1000));
+        }
+    }
 }
+
