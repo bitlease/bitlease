@@ -20,6 +20,9 @@ mod bitlease_contract {
         NoMatchingCurrency,
         /// Returned if not enough balance 
         InsufficientBalance,
+        /// Returned if not a Lender
+        NotALender,
+        UnexpectedError, 
     }
 
     #[derive(scale::Decode, scale::Encode, PartialEq)]
@@ -184,8 +187,31 @@ mod bitlease_contract {
             }
         }
 
-
+        #[ink(message)]
+        pub fn withdraw(&mut self, currency: Currency, amount: Balance) -> Result<()>{
+            // Gets the AccountId 
+            let caller = self.env().caller();
+            // Gets only Lender with the AccountId
+            let lender = self.lenders.get(&caller);
+            if let Some(mut b) = lender {
+                if b.currency != currency{
+                    return Err(Error::NoMatchingCurrency);
+                } else {
+                    if b.amount < amount {
+                        return Err(Error::InsufficientBalance)
+                    } else {
+                        let amount_transfer = b.amount;
+                        // Updates the balance in lender
+                        b.amount = b.amount - amount;
+                        ink::env::transfer::<Environment>(caller, amount_transfer).map_err(|_| Error::UnexpectedError)
+                    }
+                }    
+            } else {
+                return Err(Error::NotALender)
+            }
+        }
     }
+
     
     #[cfg(test)]
     mod tests {
