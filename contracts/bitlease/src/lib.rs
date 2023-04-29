@@ -22,10 +22,12 @@ mod bitlease_contract {
         InsufficientBalance,
     }
 
-    #[derive(scale::Decode, scale::Encode)]
+    #[derive(scale::Decode, scale::Encode, PartialEq)]
     #[cfg_attr(
         feature = "std",
-        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
+        derive(
+            scale_info::TypeInfo, 
+            ink::storage::traits::StorageLayout)
     )]
     pub struct Lend {
         amount: Balance,
@@ -34,10 +36,12 @@ mod bitlease_contract {
         interest_currency: Currency,
     }
 
-    #[derive(scale::Decode, scale::Encode)]
+    #[derive(scale::Decode, scale::Encode, PartialEq)]
     #[cfg_attr(
         feature = "std",
-        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
+        derive(
+            scale_info::TypeInfo, 
+            ink::storage::traits::StorageLayout)
     )]
     pub struct Borrow {
         amount: Balance,
@@ -166,6 +170,27 @@ mod bitlease_contract {
             Ok(())
         }
 
+        #[ink(message)]
+        pub fn get_deposit(&self) -> Option<Balance> {
+            // Gets the AccountId
+            let caller = self.env().caller();
+            // If the caller is lender 
+            if self.lenders.get(&caller) != None {
+                // Gets the lender with the AccountId provided
+                let lender = self.lenders.get(&caller).unwrap();
+                let amount = lender.amount;
+                return Some(amount);
+            } else if self.borrowers.get(&caller) != None {
+                // If the caller is borrower 
+                let borrower = self.borrowers.get(&caller). unwrap();
+                let amount = borrower.amount;
+                return Some(amount);
+            } else {
+                None
+            }
+        }
+
+
     }
     
     #[cfg(test)]
@@ -189,6 +214,7 @@ mod bitlease_contract {
         fn new_works() {
             let alice = alice();
             ink::env::test::set_account_balance(alice, 2000);
+            ink::env::test::set_callee(alice);
             let contract = BitleaseContract::new();
             let currency = Currency::USDT;
             assert!(contract.lend(currency, 1000));
