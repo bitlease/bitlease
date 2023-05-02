@@ -91,7 +91,7 @@ mod bitlease_contract {
             } else {
                 let new_lend = Lend {
                     amount: amount,
-                    interest_rate: 10,
+                    interest_rate: 5,
                     interest_currency: currency.clone(),
                 };
                 self.lenders.insert(&(caller, currency.clone()), &new_lend);
@@ -142,7 +142,7 @@ mod bitlease_contract {
                     amount: borrow_amount,
                     collateral: downpayment_amount,
                     collateral_currency: downpayment_currency.clone(),
-                    interest_rate: 10,
+                    interest_rate: 5,
                     interest_currency: borrow_currency.clone(),
                     start: Some(self.env().block_timestamp()),
                     close: None,
