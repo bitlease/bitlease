@@ -6,8 +6,9 @@ mod bitlease_contract {
 
     #[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode, Clone)]
     #[cfg_attr(
-        feature = "std", 
-        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout))]
+        feature = "std",
+        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
+    )]
     pub enum Currency {
         ASTAR,
         USDT,
@@ -18,23 +19,20 @@ mod bitlease_contract {
     pub enum Error {
         /// Returned if Currency doesn't match
         NoMatchingCurrency,
-        /// Returned if not enough balance 
+        /// Returned if not enough balance
         InsufficientBalance,
         /// Returned if not a Lender
         NotALender,
-        UnexpectedError, 
+        UnexpectedError,
     }
 
     #[derive(scale::Decode, scale::Encode, PartialEq)]
     #[cfg_attr(
         feature = "std",
-        derive(
-            scale_info::TypeInfo, 
-            ink::storage::traits::StorageLayout)
+        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
     )]
     pub struct Lend {
         amount: Balance,
-        currency: Currency,
         interest_rate: Balance,
         interest_currency: Currency,
     }
@@ -42,13 +40,10 @@ mod bitlease_contract {
     #[derive(scale::Decode, scale::Encode, PartialEq)]
     #[cfg_attr(
         feature = "std",
-        derive(
-            scale_info::TypeInfo, 
-            ink::storage::traits::StorageLayout)
+        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
     )]
     pub struct Borrow {
         amount: Balance,
-        currency: Currency, 
         collateral: Balance,
         collateral_currency: Currency,
         interest_rate: u32,
@@ -59,17 +54,16 @@ mod bitlease_contract {
 
     #[ink(storage)]
     #[derive(Default)]
-    pub struct BitleaseContract{
-        borrowers: Mapping<AccountId, Borrow>,
-        lenders: Mapping<AccountId, Lend>,
+    pub struct BitleaseContract {
+        borrowers: Mapping<(AccountId, Currency), Borrow>,
+        lenders: Mapping<(AccountId, Currency), Lend>,
         assets: Mapping<Currency, Balance>,
     }
 
     /// Specify the result type.
     pub type Result<T> = core::result::Result<T, Error>;
 
-
-    impl BitleaseContract{
+    impl BitleaseContract {
         /// Constructor that initializes the contract.
         #[ink(constructor)]
         pub fn new() -> Self {
@@ -77,90 +71,94 @@ mod bitlease_contract {
                 borrowers: Default::default(),
                 lenders: Default::default(),
                 assets: Default::default(),
-                }
-
+            }
         }
-    
-        
+
         #[ink(message)]
         pub fn lend(&mut self, currency: Currency, amount: Balance) {
             // Gets the AccountId
             let caller = self.env().caller();
 
-            // Gets only Lender with the AccountId
-            let lender = self.lenders.get(&caller);
-            if let Some(mut b) =  lender {
-                if currency == b.currency {
-                    // Updates the balance 
-                    let previous = b.amount;
-                    b.amount = previous + amount;
-                } else {
-                    b.currency = currency.clone();
-                    b.amount = amount;
-                }
+            // Gets only Lender with the AccountId and currency
+            let lender = self.lenders.get(&(caller, currency.clone()));
+            if let Some(b) = lender {
+                let new_lend = Lend {
+                    amount: b.amount + amount,
+                    interest_rate: b.interest_rate,
+                    interest_currency: b.interest_currency,
+                };
+                self.lenders.insert(&(caller, currency.clone()), &new_lend);
             } else {
-                let new_lend = Lend{
+                let new_lend = Lend {
                     amount: amount,
-                    currency: currency.clone(),
-                    interest_rate: 10,
+                    interest_rate: 5,
                     interest_currency: currency.clone(),
                 };
-                self.lenders.insert(caller, &new_lend);
+                self.lenders.insert(&(caller, currency.clone()), &new_lend);
             }
 
-            // Updates Pool 
+            // Updates Pool
             let pool_currency = self.assets.get(&currency);
 
-            if let Some(b) =  pool_currency{
-                // Updates the total 
+            if let Some(b) = pool_currency {
+                // Updates the total
                 self.assets.insert(currency.clone(), &(b + amount));
             } else {
                 self.assets.insert(currency.clone(), &amount);
             }
-
         }
-       
+
         #[ink(message)]
-        pub fn borrow(&mut self, downpayment_currency: Currency, downpayment_amount: Balance, borrow_currency: Currency, borrow_amount: Balance) -> Result<()> {
-            // Ensure the currency of the borrower and the lender are the same 
-            if downpayment_currency != borrow_currency{
+        pub fn borrow(
+            &mut self,
+            downpayment_currency: Currency,
+            downpayment_amount: Balance,
+            borrow_currency: Currency,
+            borrow_amount: Balance,
+        ) -> Result<()> {
+            // Ensure the currency of the borrower and the lender are the same
+            if downpayment_currency != borrow_currency {
                 return Err(Error::NoMatchingCurrency);
             }
             // Gets the AccountId
             let caller = self.env().caller();
 
-            // Gets only Borrower with the AccountId
-            let borrower = self.borrowers.get(&caller);
-            if let Some(mut b) =  borrower {
-                if borrow_currency == b.currency {
-                    // Updates the balance 
-                    let previous_amount = b.amount;
-                    b.amount = previous_amount + borrow_amount;
-                    let previous_collateral = b.collateral;
-                    b.collateral = previous_collateral + downpayment_amount;
-                    b.start = Some(self.env().block_timestamp());
-                } 
+            // Gets only Borrower with the AccountId and currency
+            let borrower = self.borrowers.get(&(caller, downpayment_currency.clone()));
+            if let Some(b) = borrower {
+                let new_borrow = Borrow {
+                    amount: b.amount + borrow_amount,
+                    collateral: b.collateral + downpayment_amount,
+                    collateral_currency: b.collateral_currency,
+                    interest_rate: b.interest_rate,
+                    interest_currency: b.interest_currency,
+                    start: b.start,
+                    close: b.close,
+                };
+                self.borrowers
+                    .insert(&(caller, downpayment_currency.clone()), &new_borrow);
             } else {
-                let new_borrow = Borrow{
+                let new_borrow = Borrow {
                     amount: borrow_amount,
-                    currency: borrow_currency.clone(),
                     collateral: downpayment_amount,
                     collateral_currency: downpayment_currency.clone(),
-                    interest_rate: 10,
+                    interest_rate: 5,
                     interest_currency: borrow_currency.clone(),
                     start: Some(self.env().block_timestamp()),
                     close: None,
                 };
-                self.borrowers.insert(caller, &new_borrow);
+                self.borrowers
+                    .insert(&(caller, downpayment_currency.clone()), &new_borrow);
             }
-            // Updates Pool 
+            // Updates Pool
             let pool_currency = self.assets.get(&borrow_currency);
 
-            if let Some(b) =  pool_currency{
-                // Updates the total 
-                self.assets.insert(borrow_currency.clone(), &(b - borrow_amount));
+            if let Some(b) = pool_currency {
+                // Updates the total
+                self.assets
+                    .insert(borrow_currency.clone(), &(b - borrow_amount));
             } else {
-                // Creates entry 
+                // Creates entry
                 self.assets.insert(borrow_currency.clone(), &borrow_amount);
             }
 
@@ -168,18 +166,18 @@ mod bitlease_contract {
         }
 
         #[ink(message)]
-        pub fn get_deposit(&self) -> Option<Balance> {
+        pub fn get_deposit(&self, currency: Currency) -> Option<Balance> {
             // Gets the AccountId
             let caller = self.env().caller();
-            // If the caller is lender 
-            if self.lenders.get(&caller) != None {
+            // If the caller is lender
+            if self.lenders.get(&(caller, currency.clone())) != None {
                 // Gets the lender with the AccountId provided
-                let lender = self.lenders.get(&caller).unwrap();
+                let lender = self.lenders.get(&(caller, currency.clone())).unwrap();
                 let amount = lender.amount;
                 return Some(amount);
-            } else if self.borrowers.get(&caller) != None {
-                // If the caller is borrower 
-                let borrower = self.borrowers.get(&caller). unwrap();
+            } else if self.borrowers.get(&(caller, currency.clone())) != None {
+                // If the caller is borrower
+                let borrower = self.borrowers.get(&(caller, currency.clone())).unwrap();
                 let amount = borrower.amount;
                 return Some(amount);
             } else {
@@ -188,30 +186,37 @@ mod bitlease_contract {
         }
 
         #[ink(message, payable)]
-        pub fn withdraw(&mut self, currency: Currency, amount: Balance) -> Result<()>{
-            // Gets the AccountId 
+        pub fn withdraw(&mut self, currency: Currency, amount: Balance) -> Result<()> {
+            // Gets the AccountId
             let caller = self.env().caller();
             // Gets only Lender with the AccountId
-            let lender = self.lenders.get(&caller);
-            if let Some(mut b) = lender {
-                if b.currency != currency{
-                    return Err(Error::NoMatchingCurrency);
+            let lender = self.lenders.get(&(caller, currency.clone()));
+            if let Some(b) = lender {
+                if b.amount < amount {
+                    return Err(Error::InsufficientBalance);
                 } else {
-                    if b.amount < amount {
-                        return Err(Error::InsufficientBalance)
-                    } else {
-                        // Updates the balance in lender
-                        b.amount -= amount;
-                        ink::env::transfer::<Environment>(caller, amount).map_err(|_| Error::UnexpectedError)
+                    // Updates the balance in lender
+                    let new_lend = Lend {
+                        amount: b.amount - amount,
+                        interest_rate: b.interest_rate,
+                        interest_currency: b.interest_currency,
+                    };
+                    // Updates Pool
+                    let pool_currency = self.assets.get(&currency);
+                    if let Some(b) = pool_currency {
+                        // Updates the total
+                        self.assets.insert(currency.clone(), &(b - amount));
                     }
-                }    
+                    self.lenders.insert(&(caller, currency.clone()), &new_lend);
+                    ink::env::transfer::<Environment>(caller, amount)
+                        .map_err(|_| Error::UnexpectedError)
+                }
             } else {
-                return Err(Error::NotALender)
+                return Err(Error::NotALender);
             }
         }
     }
 
-    
     #[cfg(test)]
     mod tests {
         use super::*;
@@ -230,51 +235,54 @@ mod bitlease_contract {
         }
 
         #[ink::test]
-        fn lend_works(){
-            let alice = alice();
-            ink::env::test::set_account_balance::<Environment>(alice, 2000);
-            ink::env::test::set_caller::<Environment>(alice);
-            let mut contract = BitleaseContract::new();
-            let currency = Currency::USDT;
-            contract.lend(currency, 100);
-            ink::env::test::transfer_in::<Environment>(100);
-            assert_eq!(contract.get_deposit().unwrap(), 100);
-        }
-
-        #[ink::test]
-        fn lend_works2(){
-            let alice = alice();
-            ink::env::test::set_account_balance::<Environment>(alice, 2000);
-            ink::env::test::set_caller::<Environment>(alice);
-            let mut contract = BitleaseContract::new();
-            let currency = Currency::USDT;
-            contract.lend(currency, 300);
-            ink::env::test::transfer_in::<Environment>(300);
-            assert_eq!(contract.get_deposit().unwrap(), 300);
-        }
-
-        #[ink::test]
-        fn borrow_works(){
-            let bob = bob();
-            ink::env::test::set_account_balance::<Environment>(bob, 2000);
-            ink::env::test::set_caller::<Environment>(bob);
-            let mut contract = BitleaseContract::new();
-            let downpayment_currency = Currency::USDT;
-            let borrow_currency = Currency::USDT;
-            contract.borrow(downpayment_currency, 1000, borrow_currency, 3000);
-            assert_eq!(contract.get_deposit().unwrap(), 3000);
-        }
-
-        #[ink::test]
-        fn withdraw_works(){
+        fn lend_works() {
             let alice = alice();
             ink::env::test::set_account_balance::<Environment>(alice, 2000);
             ink::env::test::set_caller::<Environment>(alice);
             let mut contract = BitleaseContract::new();
             let currency = Currency::USDT;
             contract.lend(currency.clone(), 100);
-            contract.withdraw(currency, 20);
-            assert_eq!(contract.get_deposit().unwrap(), 80);
+            ink::env::test::transfer_in::<Environment>(100);
+            assert_eq!(contract.get_deposit(currency.clone()).unwrap(), 100);
+        }
+
+        #[ink::test]
+        fn lend_works2() {
+            let alice = alice();
+            ink::env::test::set_account_balance::<Environment>(alice, 2000);
+            ink::env::test::set_caller::<Environment>(alice);
+            let mut contract = BitleaseContract::new();
+            let currency = Currency::USDT;
+            contract.lend(currency.clone(), 300);
+            ink::env::test::transfer_in::<Environment>(300);
+            assert_eq!(contract.get_deposit(currency.clone()).unwrap(), 300);
+        }
+
+        #[ink::test]
+        fn borrow_works() {
+            let bob = bob();
+            ink::env::test::set_account_balance::<Environment>(bob, 2000);
+            ink::env::test::set_caller::<Environment>(bob);
+            let mut contract = BitleaseContract::new();
+            let downpayment_currency = Currency::USDT;
+            let borrow_currency = Currency::USDT;
+            contract.borrow(downpayment_currency.clone(), 1000, borrow_currency, 3000);
+            assert_eq!(
+                contract.get_deposit(downpayment_currency.clone()).unwrap(),
+                3000
+            );
+        }
+
+        #[ink::test]
+        fn withdraw_works() {
+            let alice = alice();
+            ink::env::test::set_account_balance::<Environment>(alice, 2000);
+            ink::env::test::set_caller::<Environment>(alice);
+            let mut contract = BitleaseContract::new();
+            let currency = Currency::USDT;
+            contract.lend(currency.clone(), 100);
+            contract.withdraw(currency.clone(), 20);
+            assert_eq!(contract.get_deposit(currency.clone()).unwrap(), 80);
         }
     }
 }
