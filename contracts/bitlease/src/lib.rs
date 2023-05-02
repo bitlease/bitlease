@@ -44,7 +44,6 @@ mod bitlease_contract {
     )]
     pub struct Borrow {
         amount: Balance,
-        currency: Currency,
         collateral: Balance,
         collateral_currency: Currency,
         interest_rate: u32,
@@ -56,7 +55,7 @@ mod bitlease_contract {
     #[ink(storage)]
     #[derive(Default)]
     pub struct BitleaseContract {
-        borrowers: Mapping<AccountId, Borrow>,
+        borrowers: Mapping<(AccountId, Currency), Borrow>,
         lenders: Mapping<(AccountId, Currency), Lend>,
         assets: Mapping<Currency, Balance>,
     }
@@ -80,7 +79,7 @@ mod bitlease_contract {
             // Gets the AccountId
             let caller = self.env().caller();
 
-            // Gets only Lender with the AccountId
+            // Gets only Lender with the AccountId and currency
             let lender = self.lenders.get(&(caller, currency.clone()));
             if let Some(b) = lender {
                 let new_lend = Lend {
@@ -124,21 +123,23 @@ mod bitlease_contract {
             // Gets the AccountId
             let caller = self.env().caller();
 
-            // Gets only Borrower with the AccountId
-            let borrower = self.borrowers.get(&caller);
-            if let Some(mut b) = borrower {
-                if borrow_currency == b.currency {
-                    // Updates the balance
-                    let previous_amount = b.amount;
-                    b.amount = previous_amount + borrow_amount;
-                    let previous_collateral = b.collateral;
-                    b.collateral = previous_collateral + downpayment_amount;
-                    b.start = Some(self.env().block_timestamp());
-                }
+            // Gets only Borrower with the AccountId and currency
+            let borrower = self.borrowers.get(&(caller, downpayment_currency.clone()));
+            if let Some(b) = borrower {
+                let new_borrow = Borrow {
+                    amount: b.amount + borrow_amount,
+                    collateral: b.collateral + downpayment_amount,
+                    collateral_currency: b.collateral_currency,
+                    interest_rate: b.interest_rate,
+                    interest_currency: b.interest_currency,
+                    start: b.start,
+                    close: b.close,
+                };
+                self.borrowers
+                    .insert(&(caller, downpayment_currency.clone()), &new_borrow);
             } else {
                 let new_borrow = Borrow {
                     amount: borrow_amount,
-                    currency: borrow_currency.clone(),
                     collateral: downpayment_amount,
                     collateral_currency: downpayment_currency.clone(),
                     interest_rate: 10,
@@ -146,7 +147,8 @@ mod bitlease_contract {
                     start: Some(self.env().block_timestamp()),
                     close: None,
                 };
-                self.borrowers.insert(caller, &new_borrow);
+                self.borrowers
+                    .insert(&(caller, downpayment_currency.clone()), &new_borrow);
             }
             // Updates Pool
             let pool_currency = self.assets.get(&borrow_currency);
@@ -173,9 +175,9 @@ mod bitlease_contract {
                 let lender = self.lenders.get(&(caller, currency.clone())).unwrap();
                 let amount = lender.amount;
                 return Some(amount);
-            } else if self.borrowers.get(&caller) != None {
+            } else if self.borrowers.get(&(caller, currency.clone())) != None {
                 // If the caller is borrower
-                let borrower = self.borrowers.get(&caller).unwrap();
+                let borrower = self.borrowers.get(&(caller, currency.clone())).unwrap();
                 let amount = borrower.amount;
                 return Some(amount);
             } else {
@@ -199,6 +201,12 @@ mod bitlease_contract {
                         interest_rate: b.interest_rate,
                         interest_currency: b.interest_currency,
                     };
+                    // Updates Pool
+                    let pool_currency = self.assets.get(&currency);
+                    if let Some(b) = pool_currency {
+                        // Updates the total
+                        self.assets.insert(currency.clone(), &(b - amount));
+                    }
                     self.lenders.insert(&(caller, currency.clone()), &new_lend);
                     ink::env::transfer::<Environment>(caller, amount)
                         .map_err(|_| Error::UnexpectedError)
