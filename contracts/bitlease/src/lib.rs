@@ -58,6 +58,7 @@ mod bitlease_contract {
         borrowers: Mapping<(AccountId, Currency), Borrow>,
         lenders: Mapping<(AccountId, Currency), Lend>,
         assets: Mapping<Currency, Balance>,
+        interests: Mapping<Currency, Balance>,
     }
 
     /// Specify the result type.
@@ -71,6 +72,7 @@ mod bitlease_contract {
                 borrowers: Default::default(),
                 lenders: Default::default(),
                 assets: Default::default(),
+                interests: Default::default(),
             }
         }
 
