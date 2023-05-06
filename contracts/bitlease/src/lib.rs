@@ -261,72 +261,76 @@ mod bitlease_contract {
             }
         }
     }
-}
-#[cfg(test)]
-mod tests {
-    use super::*;
 
-    // We define some helper Accounts to make our tests more readable
-    fn default_accounts() -> ink::env::test::DefaultAccounts<Environment> {
-        ink::env::test::default_accounts::<Environment>()
-    }
+    #[cfg(test)]
+    mod tests {
+        use super::*;
 
-    fn alice() -> AccountId {
-        default_accounts().alice
-    }
+        // We define some helper Accounts to make our tests more readable
+        fn default_accounts() -> ink::env::test::DefaultAccounts<Environment> {
+            ink::env::test::default_accounts::<ink::env::DefaultEnvironment>()
+        }
 
-    fn bob() -> AccountId {
-        default_accounts().bob
-    }
+        fn alice() -> AccountId {
+            default_accounts().alice
+        }
 
-    #[ink::test]
-    fn lend_works() {
-        let alice = alice();
-        ink::env::test::set_account_balance::<Environment>(alice, 2000);
-        ink::env::test::set_caller::<Environment>(alice);
-        let mut contract = BitleaseContract::new();
-        let currency = Currency::USDT;
-        contract.lend(currency.clone(), 100);
-        ink::env::test::transfer_in::<Environment>(100);
-        assert_eq!(contract.get_deposit(currency.clone()).unwrap(), 100);
-    }
+        fn bob() -> AccountId {
+            default_accounts().bob
+        }
 
-    #[ink::test]
-    fn lend_works2() {
-        let alice = alice();
-        ink::env::test::set_account_balance::<Environment>(alice, 2000);
-        ink::env::test::set_caller::<Environment>(alice);
-        let mut contract = BitleaseContract::new();
-        let currency = Currency::USDT;
-        contract.lend(currency.clone(), 300);
-        ink::env::test::transfer_in::<Environment>(300);
-        assert_eq!(contract.get_deposit(currency.clone()).unwrap(), 300);
-    }
+        #[ink::test]
+        fn lend_works() {
+            let alice = alice();
+            ink::env::test::set_account_balance::<Environment>(alice, 2000);
+            ink::env::test::set_caller::<Environment>(alice);
+            let mut contract = BitleaseContract::new();
+            let currency = Currency::USDT;
+            ink::env::pay_with_call!(contract.lend(currency.clone()), 100);
+            assert_eq!(contract.getter_lender(currency.clone()).unwrap(), 100);
+        }
 
-    #[ink::test]
-    fn borrow_works() {
-        let bob = bob();
-        ink::env::test::set_account_balance::<Environment>(bob, 2000);
-        ink::env::test::set_caller::<Environment>(bob);
-        let mut contract = BitleaseContract::new();
-        let downpayment_currency = Currency::USDT;
-        let borrow_currency = Currency::USDT;
-        contract.borrow(downpayment_currency.clone(), 1000, borrow_currency, 3000);
-        assert_eq!(
-            contract.get_deposit(downpayment_currency.clone()).unwrap(),
-            3000
-        );
-    }
+        #[ink::test]
+        fn lend_works2() {
+            let alice = alice();
+            ink::env::test::set_account_balance::<Environment>(alice, 2000);
+            ink::env::test::set_caller::<Environment>(alice);
+            let mut contract = BitleaseContract::new();
+            let currency = Currency::USDT;
+            ink::env::pay_with_call!(contract.lend(currency.clone()), 300);
+            assert_eq!(contract.getter_lender(currency.clone()).unwrap(), 300);
+        }
 
-    #[ink::test]
-    fn withdraw_works() {
-        let alice = alice();
-        ink::env::test::set_account_balance::<Environment>(alice, 2000);
-        ink::env::test::set_caller::<Environment>(alice);
-        let mut contract = BitleaseContract::new();
-        let currency = Currency::USDT;
-        contract.lend(currency.clone(), 100);
-        contract.withdraw(currency.clone(), 20);
-        assert_eq!(contract.get_deposit(currency.clone()).unwrap(), 80);
+        #[ink::test]
+        fn borrow_works() {
+            let bob = bob();
+            ink::env::test::set_account_balance::<Environment>(bob, 2000);
+            ink::env::test::set_caller::<Environment>(bob);
+            let mut contract = BitleaseContract::new();
+            let downpayment_currency = Currency::USDT;
+            let borrow_currency = Currency::USDT;
+            ink::env::pay_with_call!(
+                contract.borrow(downpayment_currency.clone(), borrow_currency, 3000),
+                1000
+            );
+            assert_eq!(
+                contract
+                    .getter_borrower(downpayment_currency.clone())
+                    .unwrap(),
+                3000
+            );
+        }
+
+        #[ink::test]
+        fn withdraw_works() {
+            let alice = alice();
+            ink::env::test::set_account_balance::<Environment>(alice, 2000);
+            ink::env::test::set_caller::<Environment>(alice);
+            let mut contract = BitleaseContract::new();
+            let currency = Currency::USDT;
+            ink::env::pay_with_call!(contract.lend(currency.clone()), 100);
+            contract.withdraw(currency.clone(), 20);
+            assert_eq!(contract.getter_lender(currency.clone()).unwrap(), 80);
+        }
     }
 }
